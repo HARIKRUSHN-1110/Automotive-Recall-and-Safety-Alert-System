@@ -176,7 +176,6 @@ if __name__ == "__main__":
     print()
     if all_passed:
         print("🎉 All tests passed! nhtsa_client.py is working correctly.")
-        print("   You are ready to move on to Day 3 — Database Setup.")
     else:
         print("⚠️  Some tests failed. Check your internet connection")
         print("   or review the error messages above.")
