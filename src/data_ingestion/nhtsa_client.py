@@ -34,7 +34,6 @@ logger = logging.getLogger(__name__)
 
 # Constants
 
-
 NHTSA_BASE_URL = "https://api.nhtsa.gov"
 COMPLAINTS_ENDPOINT = "/complaints/complaintsByVehicle"
 RECALLS_ENDPOINT = "/recalls/recallsByVehicle"
@@ -125,6 +124,20 @@ class NHTSAAPIError(NHTSAClientError):
         self.status_code = status_code
         super().__init__(f"HTTP {status_code}: {message}")
 
+class NHTSAClientRequestError(NHTSAAPIError):
+    """
+    Raised on 4xx errors (bad request, not found, etc.).
+    NOT retried — the request is wrong, retrying won't help.
+    e.g. invalid model name, malformed params.
+    """
+    pass
+
+class NHTSAServerError(NHTSAAPIError):
+    """
+    Raised on 5xx errors (server unavailable, internal error).
+    IS retried — the server might recover after a short wait.
+    """
+    pass
 
 class NHTSATimeoutError(NHTSAClientError):
     """Raised when a request times out after all retries are exhausted."""
@@ -430,8 +443,13 @@ class NHTSAClient:
                 raise
 
             if not response.ok:
-                if 400 <= response.status_code < 500:
-                    raise NHTSAAPIError(
+                if response.status_code == 400:
+                    logger.debug("400 - no data for this vehicle: %s", params)
+                    return {"results": []}
+                
+                if 401 <= response.status_code < 500:
+                    # Other 4xx — genuine bad request, no retry
+                    raise NHTSAClientRequestError(
                         response.status_code,
                         f"Client error for URL {url} — params {params}",
                     )
@@ -516,17 +534,17 @@ class NHTSAClient:
         """
         return Recall(
             campaign_number=str(raw.get("NHTSACampaignNumber", "")),
-            manufacturer=raw.get("Manufacturer", "").upper(),
-            make=raw.get("Make", make).upper(),
-            model=raw.get("Model", model),
-            model_year=int(raw.get("ModelYear", year)),
-            component=raw.get("Component", "UNKNOWN"),
-            summary=raw.get("Summary", "").strip(),
-            consequence=raw.get("Consequence", "").strip(),
-            remedy=raw.get("Remedy", "").strip(),
+            manufacturer=(raw.get("Manufacturer") or "").upper(),
+            make=(raw.get("Make") or make).upper(),
+            model=raw.get("Model") or model,
+            model_year=int(raw.get("ModelYear") or year),
+            component=raw.get("Component") or "UNKNOWN",
+            summary=(raw.get("Summary") or "").strip(),
+            consequence=(raw.get("Consequence") or "").strip(),
+            remedy=(raw.get("Remedy") or "").strip(),
             recall_date=raw.get("ReportReceivedDate"),
-            notes=raw.get("Notes", "").strip(),
-            park_it=bool(raw.get("ParkIt", False)),
+            notes=(raw.get("Notes") or "").strip(),
+            park_it=bool(raw.get("parkIt", False)),
         )
 
     # Dunder methods
