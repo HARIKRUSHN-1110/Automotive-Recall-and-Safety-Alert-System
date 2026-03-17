@@ -4,3 +4,4 @@ tenacity
 pandas
 numpy
 matplotlib
+nltk
