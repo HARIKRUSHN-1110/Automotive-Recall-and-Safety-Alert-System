@@ -94,7 +94,7 @@ class FeatureEngineer:
                 "feature_names": [str, ...],
             }
         """
-        print("\n⚙️   Feature Engineering Pipeline")
+        print("\n   Feature Engineering Pipeline")
         print(f"    Database : {self.db_path}")
         print(f"    Output   : {self.processed_dir}\n")
 
@@ -357,12 +357,12 @@ class FeatureEngineer:
         test_recalled  = y_test.sum()
 
         print(f"\n{'='*50}")
-        print(f"  ✅  Feature Engineering Complete")
+        print(f"  Feature Engineering Complete")
         print(f"{'='*50}")
         print(f"  Train set  : {train_shape[0]:>8,} rows × {train_shape[1]:,} features")
         print(f"  Test set   : {test_shape[0]:>8,} rows × {test_shape[1]:,} features")
         print(f"  Train recalled : {train_recalled:,} ({train_recalled/len(y_train)*100:.1f}%)")
         print(f"  Test  recalled : {test_recalled:,}  ({test_recalled/len(y_test)*100:.1f}%)")
-        print(f"\n  💡 Stratified split preserved {recall_rate:.1f}% recall rate in both sets")
-        print(f"  📁 Files saved to {self.processed_dir}/")
+        print(f"\n  Stratified split preserved {recall_rate:.1f}% recall rate in both sets")
+        print(f"  Files saved to {self.processed_dir}/")
         print(f"{'='*50}\n")
