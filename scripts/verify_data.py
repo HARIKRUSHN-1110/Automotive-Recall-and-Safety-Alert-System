@@ -212,7 +212,7 @@ def check_sample_data(db: DatabaseManager):
 # Main
 
 if __name__ == "__main__":
-    print("\n🔍  Automotive Recall System — Data Quality Verification")
+    print("\n Automotive Recall System — Data Quality Verification")
 
     db = DatabaseManager()
 
@@ -239,7 +239,7 @@ if __name__ == "__main__":
 
     print()
     if all_passed:
-        print("  🎉 Data quality checks passed!")
+        print("Data quality checks passed!")
     else:
         print("  ⚠️  Some checks failed.")
         print("     Review the output above and re-run ingestion if needed.")
