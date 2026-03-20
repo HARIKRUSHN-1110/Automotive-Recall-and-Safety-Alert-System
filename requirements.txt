@@ -7,3 +7,4 @@ matplotlib
 nltk
 scipy
 scikit-learn
+lightgbm
