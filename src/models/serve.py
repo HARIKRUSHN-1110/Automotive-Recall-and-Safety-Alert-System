@@ -1,3 +1,9 @@
+# Model being used: LightGBM
+# Threshold: 0.338
+# F1: 60.5% | Recall: 70.2% | Precision: 53.2% | ROC-AUC: 0.916
+# Trained on: 140,488 complaints | Test set: 35,123 complaints
+# Class balance: 11.3% recalled, 88.7% not recalled
+
 """
 serve.py
 --------

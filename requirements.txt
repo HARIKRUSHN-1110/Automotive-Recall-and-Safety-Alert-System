@@ -8,3 +8,5 @@ nltk
 scipy
 scikit-learn
 lightgbm
+streamlit
+plotly
