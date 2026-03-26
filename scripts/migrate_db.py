@@ -18,7 +18,10 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.data_ingestion.database import DatabaseManager
+from dotenv import load_dotenv
+load_dotenv()
+
+from src.data_ingestion.database import DatabaseManager, DATABASE_URL
 from src.data_ingestion.nhtsa_client import Complaint, Recall
 
 
@@ -30,21 +33,21 @@ def print_divider(title: str):
 
 def run_migration():
     print("\n🗄️  Automotive Recall System — Database Migration")
-    print("   Setting up SQLite database...\n")
+    # Show which database we are connecting to (hide password)
+    db_display = DATABASE_URL.split("@")[-1] if "@" in DATABASE_URL else DATABASE_URL[:40]
+    print(f"   Connecting to: {db_display}\n")
 
-    # ── Step 1: Initialise database ───────────────────────────
+    # Step 1: Initialise database
     print_divider("STEP 1 — Create database & tables")
 
     db = DatabaseManager()
     db.init_db()
 
-    db_exists = os.path.isfile(db.db_path)
-    print(f"  {'✅' if db_exists else '❌'}  Database file created : {db.db_path}")
     print(f"  ✅  complaints table   : ready")
     print(f"  ✅  recalls table      : ready")
     print(f"  ✅  Indexes (x8)       : ready")
 
-    # ── Step 2: Smoke test — complaints ──────────────────────
+    # Step 2: Smoke test — complaints
     print_divider("STEP 2 — Smoke test: complaints table")
 
     test_complaint = Complaint(
@@ -76,7 +79,7 @@ def run_migration():
     count = db.count_complaints()
     print(f"  ✅  Total complaints    : {count}")
 
-    # Step 3: Smoke test — recalls 
+    # Step 3: Smoke test — recalls
     print_divider("STEP 3 — Smoke test: recalls table")
 
     test_recall = Recall(
@@ -107,7 +110,7 @@ def run_migration():
     count_r = db.count_recalls()
     print(f"  ✅  Total recalls       : {count_r}")
 
-    # Step 4: Stats summary 
+    # Step 4: Stats summary
     print_divider("STEP 4 — Database stats")
 
     stats = db.get_stats()
@@ -115,20 +118,19 @@ def run_migration():
     print(f"  Total recalls    : {stats['total_recalls']}")
     print(f"  Manufacturers    : {stats['manufacturers'] or 'none yet'}")
 
-    # Final result 
+    # Final result
     all_passed = all([inserted, exists, found, inserted_r, exists_r, found_r])
 
     print_divider("RESULT")
     if all_passed:
         print("  🎉 Migration successful!")
-        print(f"     Database location : {os.path.abspath(db.db_path)}")
+        print(f"     Connected to  : {db_display}")
         print()
         print("  Next step: run the data ingestion pipeline")
         print("    python scripts/run_ingestion.py")
     else:
         print("  ❌ Migration had failures — check the output above")
     print()
-
 
 if __name__ == "__main__":
     run_migration()
