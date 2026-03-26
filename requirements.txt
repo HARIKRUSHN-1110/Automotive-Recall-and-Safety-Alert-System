@@ -10,3 +10,6 @@ scikit-learn
 lightgbm
 streamlit
 plotly
+sqlalchemy
+psycopg2-binary
+dotenv

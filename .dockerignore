@@ -1,0 +1,48 @@
+# .dockerignore — files Docker should NOT copy into the image
+# Why this matters:
+#   COPY . . without a .dockerignore copies EVERYTHING —
+#   including your 180MB database, trained models, notebooks, git history, and venv. This makes images huge and slow.e.
+
+# Data
+data/
+logs/
+
+#  Python environment 
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+*.cover
+.git/
+.gitignore
+.vscode/
+.idea/
+*.swp
+*~
+
+#OS
+.DS_Store
+Thumbs.db
+
+#Secrets
+.env
+.env.local
+
+#Jupyter checkpoints
+.ipynb_checkpoints/
+#Docker itself
+
+Dockerfile
+docker-compose.yml
+.dockerignore

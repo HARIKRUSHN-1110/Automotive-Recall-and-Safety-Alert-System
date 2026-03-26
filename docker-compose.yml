@@ -1,0 +1,56 @@
+# docker-compose.yml — Automotive Recall System
+# Usage:
+#   docker-compose up --build    # first run (builds image)
+#   docker-compose up            # subsequent runs (uses cache)
+#   docker-compose down          # stop and remove container
+#   docker-compose logs -f app   # tail live logs
+
+version: "3.9"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: autosafe-app
+    image: autosafe:latest
+
+    ports:
+      # host:container — open localhost:8501 in your browser
+      - "8501:8501"
+
+    volumes:
+      # Mount the data directory from your laptop INTO the
+      # container at /app/data. This means:
+      #   - Container reads the real SQLite database
+      #   - Container loads the real trained model pickles
+      #   - No need to rebuild the image when data changes
+      #   - Data persists if the container restarts
+      - ./data:/app/data
+
+      # Mount logs so you can read them from your laptop
+      - ./logs:/app/logs
+
+    environment:
+      - APP_ENV=production
+      - PYTHONPATH=/app
+
+    # Load secrets from .env if it exists (API keys etc.)
+    # The file is optional because as of now we do not have any screte keys
+    env_file:
+      - path: .env
+        required: false
+
+    # Restart policy:
+    # unless-stopped = restart on crash, but NOT after
+    # `docker-compose down` (intentional stop)
+    restart: unless-stopped
+
+    # Health check mirrors the Dockerfile one
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
