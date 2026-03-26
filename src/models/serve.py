@@ -40,6 +40,7 @@ import time
 from dataclasses import dataclass
 from typing import Optional
 import warnings
+from huggingface_hub import hf_hub_download
 
 import numpy as np
 from scipy.sparse import hstack, csr_matrix
@@ -51,7 +52,8 @@ logger = logging.getLogger(__name__)
 MODELS_DIR    = "data/models"
 PROCESSED_DIR = "data/processed"
 
-# Config
+# Hugging face model serving Config
+HF_REPO_ID = os.getenv("HF_REPO_ID", "")
 
 # Threshold found in notebook (maximises F1, recall >= 70%)
 # Change this value if we retrain the model with a different threshold
@@ -180,16 +182,36 @@ class ModelServer:
         )
 
     def _load_pickle(self, directory: str, filename: str):
-        """Load one pickle file, raise a clear error if missing."""
+        """Load one pickle file, raise a clear error if missing.
+        1. first try to load the local file first if the local file exists -> load directly
+        2. if the local file does not exist, try to load from Huggingface Hub.
+        3. both missing -> raise error
+        """
         path = os.path.join(directory, filename)
-        if not os.path.exists(path):
-            raise FileNotFoundError(
-                f"Model artifact not found: {path}\n"
-                f"Have you run the training notebook? "
-                f"Expected file at: {os.path.abspath(path)}"
+
+        if os.file.exists(path):
+            with open(path, "rb") as f:
+                return pickle.load(f)
+            
+        if HF_REPO_ID:
+            logger.info(
+                f"Downloading model artifact from Huggingface Hub (%s)...",
+                filename, HF_REPO_ID,
             )
-        with open(path, "rb") as f:
-            return pickle.load(f)
+            os.makedirs(directory, exist_ok=True)
+            cached = hf_hub_download(
+                repo_id = HF_REPO_ID,
+                filename = filename,
+                local_dir = directory,
+            )
+            with open(cached, "rb") as f:
+                return pickle.load(f)
+            
+        raise FileNotFoundError(
+            f"Model artifact not found: {path}\n"
+            f"Have you run the training notebook? "
+            f"Either run the training notebook or set HF_REPO_ID in .env"
+        )
 
     # Public API
 
