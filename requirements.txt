@@ -8,7 +8,7 @@ nltk
 scipy
 scikit-learn
 lightgbm
-streamlit
+streamlit==1.41.0
 plotly
 sqlalchemy
 psycopg2-binary
