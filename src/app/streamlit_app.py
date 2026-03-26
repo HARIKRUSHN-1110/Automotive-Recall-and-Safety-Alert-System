@@ -1,26 +1,27 @@
 """
-streamlit_app.py
-----------------
-Web Application.
+streamlit_app.py — Streamlit Web Application.
 
 Run from project root:
     streamlit run src/app/streamlit_app.py
 """
 
 import os
-import sqlite3
 import sys
+import warnings
 import pandas as pd
 import streamlit as st
-import warnings
 import plotly.graph_objects as go
 import plotly.express as px
 from collections import Counter
+from sqlalchemy import create_engine, text
 
 # Make src/ importable from any working directory
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
+
+from dotenv import load_dotenv
+load_dotenv()
 
 # Page config — must be the FIRST Streamlit call
 
@@ -38,10 +39,44 @@ YEAR_MIN   = 2015
 YEAR_MAX   = 2025
 YEAR_DEFAULT = 2020
 
+# DATABASE_URL — PostgreSQL in production, SQLite fallback locally
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    f"sqlite:///{DB_PATH}"
+)
+
+
+@st.cache_resource(show_spinner=False)
+def get_engine():
+    """
+    SQLAlchemy engine — created once, reused for all DB queries.
+    Works with both PostgreSQL (production) and SQLite (local fallback).
+    """
+    return create_engine(DATABASE_URL)
+
+
+def db_query(sql: str, params: dict = None) -> list:
+    """
+    Run a SELECT query and return list of row dicts.
+    Central helper so all DB calls go through one place.
+    """
+    engine = get_engine()
+    with engine.connect() as conn:
+        cursor = conn.execute(text(sql), params or {})
+        return [dict(row) for row in cursor.mappings().fetchall()]
+
+
+def db_scalar(sql: str, params: dict = None):
+    """Run a query returning a single value (COUNT, MIN, MAX etc.)."""
+    engine = get_engine()
+    with engine.connect() as conn:
+        return conn.execute(text(sql), params or {}).scalar()
+
+
 # Lazy-load model server
 # Loaded once on first prediction, reused for every subsequent
 # search. Loading takes ~200ms — we don't want it on startup.
- 
+
 @st.cache_resource(show_spinner=False)
 def get_model_server():
     """
@@ -53,8 +88,8 @@ def get_model_server():
     server = ModelServer()
     server.load_model()
     return server
- 
- 
+
+
 @st.cache_resource(show_spinner=False)
 def get_text_processor():
     """Load TextPreprocessor once and reuse."""
@@ -139,25 +174,21 @@ st.markdown("""
 # Database helpers — cached so they only hit DB once per session
 
 @st.cache_data(show_spinner=False)
-def get_manufacturers() -> list[str]:
+def get_manufacturers() -> list:
     """
     Load distinct manufacturer names from the database.
     Cached — only queries once per Streamlit session.
     """
     try:
-        conn = sqlite3.connect(DB_PATH)
-        rows = conn.execute(
-            "SELECT DISTINCT make FROM complaints ORDER BY make"
-        ).fetchall()
-        conn.close()
-        return [r[0] for r in rows if r[0]]
+        rows = db_query("SELECT DISTINCT make FROM complaints ORDER BY make")
+        return [r["make"] for r in rows if r["make"]]
     except Exception as e:
         st.error(f"Database error: {e}")
         return []
 
 
 @st.cache_data(show_spinner=False)
-def get_models_for_make(make: str) -> list[str]:
+def get_models_for_make(make: str) -> list:
     """
     Load models for a specific manufacturer.
     Cached per make — switching makes re-queries once, then caches.
@@ -165,13 +196,11 @@ def get_models_for_make(make: str) -> list[str]:
     if not make:
         return []
     try:
-        conn = sqlite3.connect(DB_PATH)
-        rows = conn.execute(
-            "SELECT DISTINCT model FROM complaints WHERE make = ? ORDER BY model",
-            (make,)
-        ).fetchall()
-        conn.close()
-        return [r[0] for r in rows if r[0]]
+        rows = db_query(
+            "SELECT DISTINCT model FROM complaints WHERE make = :make ORDER BY model",
+            {"make": make}
+        )
+        return [r["model"] for r in rows if r["model"]]
     except Exception as e:
         st.error(f"Database error: {e}")
         return []
@@ -181,13 +210,10 @@ def get_models_for_make(make: str) -> list[str]:
 def get_complaint_count(make: str, model: str, year: int) -> int:
     """Return complaint count for a specific vehicle."""
     try:
-        conn = sqlite3.connect(DB_PATH)
-        count = conn.execute(
-            "SELECT COUNT(*) FROM complaints WHERE make=? AND model=? AND model_year=?",
-            (make, model, year)
-        ).fetchone()[0]
-        conn.close()
-        return count
+        return db_scalar(
+            "SELECT COUNT(*) FROM complaints WHERE make=:make AND model=:model AND model_year=:year",
+            {"make": make, "model": model, "year": year}
+        ) or 0
     except Exception:
         return 0
 
@@ -196,11 +222,9 @@ def get_complaint_count(make: str, model: str, year: int) -> int:
 def get_db_stats() -> dict:
     """Load summary stats for the sidebar."""
     try:
-        conn = sqlite3.connect(DB_PATH)
-        complaints = conn.execute("SELECT COUNT(*) FROM complaints").fetchone()[0]
-        recalls    = conn.execute("SELECT COUNT(*) FROM recalls").fetchone()[0]
-        makes      = conn.execute("SELECT COUNT(DISTINCT make) FROM complaints").fetchone()[0]
-        conn.close()
+        complaints = db_scalar("SELECT COUNT(*) FROM complaints") or 0
+        recalls    = db_scalar("SELECT COUNT(*) FROM recalls") or 0
+        makes      = db_scalar("SELECT COUNT(DISTINCT make) FROM complaints") or 0
         return {"complaints": complaints, "recalls": recalls, "makes": makes}
     except Exception:
         return {"complaints": 0, "recalls": 0, "makes": 0}
@@ -214,7 +238,7 @@ def render_sidebar():
         st.markdown("*AI-powered recall risk checker*")
         st.divider()
 
-        # About 
+        # About
         with st.expander("About this tool", expanded=True):
             st.markdown("""
             AutoSafe uses machine learning to predict
@@ -390,7 +414,7 @@ def render_search_form() -> dict:
     return None
 
 # fetch complaints & run prediction
- 
+
 def get_risk_assessment(make: str, model: str, year: int) -> dict:
     """
     Full pipeline for one vehicle search:
@@ -399,50 +423,40 @@ def get_risk_assessment(make: str, model: str, year: int) -> dict:
       3. Clean the text via TextPreprocessor
       4. Call ModelServer.predict_proba()
       5. Return result + raw complaints for display
- 
+
     Why concatenate summaries?
     The model was trained on individual complaint summaries.
     At inference time we don't have one complaint — we have many.
     Concatenating the most recent complaints gives the model a
     rich signal that reflects the vehicle's current complaint pattern.
- 
+
     Returns:
         Dict with keys: result, complaints, recalls, error
     """
     try:
-        conn = sqlite3.connect(DB_PATH)
-        conn.row_factory = sqlite3.Row
- 
-        # Fetch most recent 20 complaints for this vehicle
-        complaints = conn.execute(
+        complaints = db_query(
             """
             SELECT odi_number, component, summary, crash, fire,
                    injuries, deaths, date_complained
             FROM complaints
-            WHERE make = ? AND model = ? AND model_year = ?
+            WHERE make = :make AND model = :model AND model_year = :year
             ORDER BY date_complained DESC
             LIMIT 20
             """,
-            (make, model, year)
-        ).fetchall()
- 
-        # Fetch any recalls for this vehicle
-        recalls = conn.execute(
+            {"make": make, "model": model, "year": year}
+        )
+
+        recalls = db_query(
             """
             SELECT campaign_number, component, summary,
                    consequence, remedy, recall_date, park_it
             FROM recalls
-            WHERE make = ? AND model = ? AND model_year = ?
+            WHERE make = :make AND model = :model AND model_year = :year
             ORDER BY recall_date DESC
             """,
-            (make, model, year)
-        ).fetchall()
- 
-        conn.close()
- 
-        complaints = [dict(r) for r in complaints]
-        recalls    = [dict(r) for r in recalls]
- 
+            {"make": make, "model": model, "year": year}
+        )
+
         if not complaints:
             return {
                 "result":     None,
@@ -460,14 +474,14 @@ def get_risk_assessment(make: str, model: str, year: int) -> dict:
             component = complaints[0]["component"] or "UNKNOWN"
             crash     = any(c["crash"] for c in complaints)
             fire      = any(c["fire"]  for c in complaints)
- 
+
         # Clean the text through the same pipeline used in training
         processor    = get_text_processor()
         clean_summary = processor.process(summary_text)
- 
+
         if not clean_summary:
             clean_summary = f"{make} {model} vehicle issue"
- 
+
         # Run model prediction
         server = get_model_server()
         with warnings.catch_warnings():
@@ -481,14 +495,14 @@ def get_risk_assessment(make: str, model: str, year: int) -> dict:
                 crash     = crash,
                 fire      = fire,
             )
- 
+
         return {
             "result":     result,
             "complaints": complaints,
             "recalls":    recalls,
             "error":      None,
         }
- 
+
     except Exception as e:
         return {
             "result":     None,
@@ -498,7 +512,7 @@ def get_risk_assessment(make: str, model: str, year: int) -> dict:
         }
 
 # Risk gauge plotly
- 
+
 def render_risk_gauge(score: int, label: str):
 
     if score < 40:
@@ -621,48 +635,46 @@ def render_recalls_section(recalls: list, make: str, model: str, year: int):
 
 
 @st.cache_data(show_spinner=False)
-def get_complaints_for_charts(make: str, model: str, year: int) -> list:
+def get_complaints_for_charts(make: str, model: str, year: int) -> dict:
     """
     Fetch all complaints for this vehicle for charting.
     Separate from the 20-complaint limit used for prediction —
     charts need the full history for accurate trend lines.
     """
     try:
-        conn = sqlite3.connect(DB_PATH)
-        rows = conn.execute(
+        rows = db_query(
             """
             SELECT date_complained, component, injuries
             FROM complaints
-            WHERE make = ? AND model = ? AND model_year = ?
+            WHERE make = :make AND model = :model AND model_year = :year
             ORDER BY date_complained ASC
             """,
-            (make, model, year)
-        ).fetchall()
+            {"make": make, "model": model, "year": year}
+        )
 
-        siblings = conn.execute(
+        siblings = db_query(
             """
             SELECT model, COUNT(*) as cnt
             FROM complaints
-            WHERE make = ? AND model_year = ?
+            WHERE make = :make AND model_year = :year
             GROUP BY model
             ORDER BY cnt DESC
             LIMIT 8
             """,
-            (make, year)
-        ).fetchall()
-        conn.close()
+            {"make": make, "year": year}
+        )
 
         return {
-            "complaints": [dict(zip(["date","component","injuries"], r)) for r in rows],
-            "siblings":   [dict(zip(["model","count"], r)) for r in siblings],
+            "complaints": [{"date": r["date_complained"], "component": r["component"], "injuries": r["injuries"]} for r in rows],
+            "siblings":   [{"model": r["model"], "count": r["cnt"]} for r in siblings],
         }
     except Exception:
         return {"complaints": [], "siblings": []}
-    
+
 def render_visualizations(make: str, model: str, year: int):
     """Three Plotly charts: trend, component breakdown, model comparison."""
 
-    st.markdown("### 📈 Visual Analysis")
+    st.markdown("### Visual Analysis")
 
     data      = get_complaints_for_charts(make, model, year)
     complaints = data["complaints"]
@@ -789,7 +801,7 @@ def render_visualizations(make: str, model: str, year: int):
             )
 
 # Risk Assessment Display
- 
+
 def render_risk_assessment(search: dict):
     """
     Full risk assessment section shown after a search.
@@ -798,10 +810,10 @@ def render_risk_assessment(search: dict):
     make  = search["make"]
     model = search["model"]
     year  = search["year"]
- 
+
     st.divider()
     st.markdown(f"### 📊 Risk Assessment — {make} {model} {year}")
- 
+
     # Run prediction
     with st.spinner("Analysing complaints and predicting recall risk..."):
         data = get_risk_assessment(make, model, year)
@@ -815,42 +827,42 @@ def render_risk_assessment(search: dict):
         if data["recalls"]:
             st.error(f"⚠️ However, {len(data['recalls'])} recall(s) are on record.")
         return
-    
+
     if data["error"]:
         st.error(f"⚠️ Prediction error: {data['error']}")
         return
- 
+
     result     = data["result"]
     complaints = data["complaints"]
     recalls    = data["recalls"]
- 
+
     #Three-column layout
     col_gauge, col_metrics, col_context = st.columns([1.2, 1, 1])
- 
-    #Left: Gauge 
+
+    #Left: Gauge
     with col_gauge:
         render_risk_gauge(result.risk_score, result.risk_label)
- 
+
     #Middle: Key metrics
     with col_metrics:
         st.markdown("#### Key Metrics")
- 
+
         # Risk probability bar
         st.markdown("**Recall probability**")
         st.progress(result.probability)
         st.caption(f"{result.probability*100:.1f}% chance of recall")
- 
+
         st.markdown("---")
- 
+
         # Complaint count
         complaint_count = len(complaints)
         st.metric("Complaints analysed", complaint_count)
- 
+
         # Severity flags
         crash_count = sum(1 for c in complaints if c.get("crash"))
         fire_count  = sum(1 for c in complaints if c.get("fire"))
         injury_count = sum(c.get("injuries", 0) or 0 for c in complaints)
- 
+
         if crash_count or fire_count or injury_count:
             st.markdown("**Severity signals detected**")
             if crash_count:
@@ -859,11 +871,11 @@ def render_risk_assessment(search: dict):
                 st.error(f"🔥 {fire_count} fire report(s)")
             if injury_count:
                 st.warning(f"🏥 {injury_count} injur(ies) reported")
- 
+
     # Right: Context
     with col_context:
         st.markdown("#### Context")
- 
+
         # Existing recalls
         if recalls:
             st.error(f"⚠️ **{len(recalls)} active recall(s) on record**")
@@ -876,9 +888,9 @@ def render_risk_assessment(search: dict):
                         st.error("🚫 NHTSA advises: Do not drive this vehicle")
         else:
             st.success("No active recalls on record for this vehicle")
- 
+
         st.markdown("---")
- 
+
         # Model confidence note
         st.markdown("**About this score**")
         st.caption(
@@ -886,7 +898,7 @@ def render_risk_assessment(search: dict):
             f"Model threshold: {result.threshold:.3f}. "
             f"Inference time: {result.elapsed_ms:.0f}ms."
         )
- 
+
         if complaint_count == 0:
             st.warning(
                 "⚠️ No complaints found for this vehicle/year. "
@@ -894,10 +906,10 @@ def render_risk_assessment(search: dict):
             )
         elif complaint_count < 5:
             st.warning("⚠️ Limited data — score may be less reliable.")
- 
+
     #Risk interpretation
     st.markdown("<br>", unsafe_allow_html=True)
- 
+
     if result.risk_label == "High":
         st.error(
             "🔴 **High Risk** — This vehicle's complaint pattern resembles "
@@ -915,7 +927,7 @@ def render_risk_assessment(search: dict):
             "**Low Risk :** Complaint pattern does not strongly resemble "
             "recalled vehicles. Continue to check NHTSA periodically."
         )
- 
+
     #NHTSA link
     nhtsa_url = (
         f"https://www.nhtsa.gov/vehicle/{make}/{model}/{year}/4DR"
@@ -924,20 +936,20 @@ def render_risk_assessment(search: dict):
         f"🔗 [Check official NHTSA records for {make} {model} {year}]({nhtsa_url})",
         unsafe_allow_html=False,
     )
- 
+
     render_complaints_table(complaints)
     st.divider()
     render_recalls_section(recalls, make, model, year)
     st.divider()
     render_visualizations(make, model, year)
-           
+
 # Main
- 
+
 def main():
     render_sidebar()
     render_header()
     render_search_form_result = render_search_form()
- 
+
     if render_search_form_result:
         render_risk_assessment(render_search_form_result)
     else:
@@ -950,7 +962,7 @@ def main():
             <p>Search any make, model, and year from our database of 179,000+ complaints</p>
         </div>
         """, unsafe_allow_html=True)
- 
+
         # Show example vehicles as inspiration
         st.markdown("#### 💡 Try these examples:")
         examples = [
@@ -959,7 +971,7 @@ def main():
             ("FORD",    "F-150",   2018),
             ("TESLA",   "Model 3", 2021),
         ]
- 
+
         cols = st.columns(len(examples))
         for col, (make, model, year) in zip(cols, examples):
             with col:
