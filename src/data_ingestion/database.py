@@ -3,14 +3,13 @@ database.py
 -----------
 SQLite database management
 
-Responsibilities:
+What it does:
   - Manage database connections (open, close, reuse)
   - Create tables (complaints, recalls) on first run
   - Create indexes for fast queries
   - CRUD operations: insert, read, count, check duplicates
 
-Every other module in this project talks to the database
-through this file only — never raw SQL scattered elsewhere.
+Every other module in this project talks to the database through this file only — never raw SQL scattered elsewhere.
 
 Usage:
     from src.data_ingestion.database import DatabaseManager
@@ -27,20 +26,23 @@ Usage:
 
 import logging
 import os
-import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Optional
 
+from sqlalchemy import create_engine, text
 from src.data_ingestion.nhtsa_client import Complaint, Recall
 
 logger = logging.getLogger(__name__)
-
-# Default database file path (relative to project root)
-
-DEFAULT_DB_PATH = "data/automotive_recall.db"
+os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Load from environment variable — set in .env for local devion
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "sqlite:///data/automotive_recall.db"   # fallback Default for local dev without .env, if postgresql path does not exist
+)
 
 # SQL — Table Definitions
+
 
 CREATE_COMPLAINTS_TABLE = """
 CREATE TABLE IF NOT EXISTS complaints (
@@ -107,16 +109,21 @@ class DatabaseManager:
             db.insert_complaints(complaints)
     """
 
-    def __init__(self, db_path: str = DEFAULT_DB_PATH):
-        self.db_path = db_path
-        self._ensure_directory()
-        logger.info("DatabaseManager ready — db_path=%s", self.db_path)
+    def __init__(self, db_url: str = None):
+        self.db_url = db_url or DATABASE_URL
+        # Only create local directories for SQLite fallback
+        if self.db_url.startswith("sqlite"):
+            self._ensure_directory()
+        self.engine = create_engine(self.db_url)
+        logger.info("DatabaseManager ready — %s", self.db_url[:40])
 
-    #  Setup 
+    #  Setup
 
     def _ensure_directory(self):
         """Create the data/ directory if it doesn't exist yet."""
-        directory = os.path.dirname(self.db_path)
+        # Extract path from sqlite:///data/... URL
+        db_path = self.db_url.replace("sqlite:///", "")
+        directory = os.path.dirname(db_path)
         if directory and not os.path.exists(directory):
             os.makedirs(directory, exist_ok=True)
             logger.info("Created directory: %s", directory)
@@ -127,29 +134,26 @@ class DatabaseManager:
         Safe to call multiple times — never overwrites existing data.
         Call this once at application startup.
         """
-        logger.info("Initialising database at %s", self.db_path)
+        logger.info("Initialising database — %s", self.db_url[:40])
         with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(CREATE_COMPLAINTS_TABLE)
-            cursor.execute(CREATE_RECALLS_TABLE)
+            conn.execute(text(CREATE_COMPLAINTS_TABLE))
+            conn.execute(text(CREATE_RECALLS_TABLE))
             for index_sql in CREATE_INDEXES:
-                cursor.execute(index_sql)
-            conn.commit()
+                conn.execute(text(index_sql))
         logger.info("Database initialised successfully")
 
-    # Connection Management 
+    # Connection Management
 
     @contextmanager
     def _get_connection(self):
         """
-        Open a database connection, yield it, then always close it.
-        Rolls back automatically if an error occurs.
+        Open a SQLAlchemy connection, yield it, then always close it.
+        Works with both PostgreSQL (production) and SQLite (fallback).
         """
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys = ON")
+        conn = self.engine.connect()
         try:
             yield conn
+            conn.commit()
         except Exception:
             conn.rollback()
             raise
@@ -170,7 +174,7 @@ class DatabaseManager:
 
         """
         sql = """
-            INSERT OR IGNORE INTO complaints (
+            INSERT INTO complaints (
                 odi_number, make, model, model_year,
                 component, summary,
                 crash, fire, injuries, deaths,
@@ -183,6 +187,7 @@ class DatabaseManager:
                 :date_complained, :date_of_incident, :vehicle_speed,
                 :created_at
             )
+            ON CONFLICT (odi_number) DO NOTHING
         """
         params = {
             "odi_number":       complaint.odi_number,
@@ -201,8 +206,7 @@ class DatabaseManager:
             "created_at":       _now(),
         }
         with self._get_connection() as conn:
-            cursor = conn.execute(sql, params)
-            conn.commit()
+            cursor = conn.execute(text(sql), params)
             inserted = cursor.rowcount > 0
         if inserted:
             logger.debug("Inserted complaint %s", complaint.odi_number)
@@ -221,7 +225,7 @@ class DatabaseManager:
             return {"inserted": 0, "skipped": 0, "total": 0}
 
         sql = """
-            INSERT OR IGNORE INTO complaints (
+            INSERT INTO complaints (
                 odi_number, make, model, model_year,
                 component, summary,
                 crash, fire, injuries, deaths,
@@ -234,6 +238,7 @@ class DatabaseManager:
                 :date_complained, :date_of_incident, :vehicle_speed,
                 :created_at
             )
+            ON CONFLICT (odi_number) DO NOTHING
         """
         now = _now()
         params_list = [
@@ -256,8 +261,7 @@ class DatabaseManager:
             for c in complaints
         ]
         with self._get_connection() as conn:
-            cursor = conn.executemany(sql, params_list)
-            conn.commit()
+            cursor = conn.execute(text(sql), params_list)
             inserted = cursor.rowcount
         skipped = len(complaints) - inserted
         result = {"inserted": inserted, "skipped": skipped, "total": len(complaints)}
@@ -266,13 +270,13 @@ class DatabaseManager:
             inserted, skipped, len(complaints),
         )
         return result
-    
+
     """
     Note: insert_complaints() vs insert_complaint() — the batch version uses executemany() which wraps hundreds of inserts in a single transaction.
     One commit for 500 rows is ~100 times faster than 500 individual commits.
 
     """
-    #  INSERT — Recalls 
+    #  INSERT — Recalls
 
     def insert_recall(self, recall: Recall) -> bool:
         """
@@ -282,7 +286,7 @@ class DatabaseManager:
             True if inserted, False if skipped (duplicate).
         """
         sql = """
-            INSERT OR IGNORE INTO recalls (
+            INSERT INTO recalls (
                 campaign_number, manufacturer,
                 make, model, model_year,
                 component, summary, consequence, remedy, notes,
@@ -293,6 +297,7 @@ class DatabaseManager:
                 :component, :summary, :consequence, :remedy, :notes,
                 :recall_date, :park_it, :created_at
             )
+            ON CONFLICT (campaign_number) DO NOTHING
         """
         params = {
             "campaign_number": recall.campaign_number,
@@ -310,8 +315,7 @@ class DatabaseManager:
             "created_at":      _now(),
         }
         with self._get_connection() as conn:
-            cursor = conn.execute(sql, params)
-            conn.commit()
+            cursor = conn.execute(text(sql), params)
             inserted = cursor.rowcount > 0
         if inserted:
             logger.debug("Inserted recall %s", recall.campaign_number)
@@ -330,7 +334,7 @@ class DatabaseManager:
             return {"inserted": 0, "skipped": 0, "total": 0}
 
         sql = """
-            INSERT OR IGNORE INTO recalls (
+            INSERT INTO recalls (
                 campaign_number, manufacturer,
                 make, model, model_year,
                 component, summary, consequence, remedy, notes,
@@ -341,6 +345,7 @@ class DatabaseManager:
                 :component, :summary, :consequence, :remedy, :notes,
                 :recall_date, :park_it, :created_at
             )
+            ON CONFLICT (campaign_number) DO NOTHING
         """
         now = _now()
         params_list = [
@@ -362,8 +367,7 @@ class DatabaseManager:
             for r in recalls
         ]
         with self._get_connection() as conn:
-            cursor = conn.executemany(sql, params_list)
-            conn.commit()
+            cursor = conn.execute(text(sql), params_list)
             inserted = cursor.rowcount
         skipped = len(recalls) - inserted
         result = {"inserted": inserted, "skipped": skipped, "total": len(recalls)}
@@ -373,7 +377,7 @@ class DatabaseManager:
         )
         return result
 
-    #  READ — Complaints 
+    #  READ — Complaints
 
     def get_complaints(
         self,
@@ -395,11 +399,11 @@ class DatabaseManager:
             LIMIT :limit
         """
         with self._get_connection() as conn:
-            cursor = conn.execute(sql, {
+            cursor = conn.execute(text(sql), {
                 "make": make.upper(), "model": model,
                 "year": year, "limit": limit,
             })
-            rows = [dict(row) for row in cursor.fetchall()]
+            rows = [dict(row) for row in cursor.mappings().fetchall()]
         logger.debug("get_complaints(%s %s %d) → %d rows", make, model, year, len(rows))
         return rows
 
@@ -412,11 +416,11 @@ class DatabaseManager:
         """
         sql = "SELECT * FROM complaints LIMIT :limit"
         with self._get_connection() as conn:
-            rows = [dict(row) for row in conn.execute(sql, {"limit": limit})]
+            rows = [dict(row) for row in conn.execute(text(sql), {"limit": limit}).mappings().fetchall()]
         logger.info("get_all_complaints() → %d rows", len(rows))
         return rows
 
-    # READ — Recalls 
+    # READ — Recalls
 
     def get_recalls(self, make: str, model: str, year: int) -> list:
         """
@@ -431,10 +435,10 @@ class DatabaseManager:
             ORDER BY recall_date DESC
         """
         with self._get_connection() as conn:
-            cursor = conn.execute(sql, {
+            cursor = conn.execute(text(sql), {
                 "make": make.upper(), "model": model, "year": year,
             })
-            rows = [dict(row) for row in cursor.fetchall()]
+            rows = [dict(row) for row in cursor.mappings().fetchall()]
         logger.debug("get_recalls(%s %s %d) → %d rows", make, model, year, len(rows))
         return rows
 
@@ -442,7 +446,7 @@ class DatabaseManager:
         """Fetch all recalls. Used by ML pipeline for label generation."""
         sql = "SELECT * FROM recalls"
         with self._get_connection() as conn:
-            rows = [dict(row) for row in conn.execute(sql)]
+            rows = [dict(row) for row in conn.execute(text(sql)).mappings().fetchall()]
         logger.info("get_all_recalls() → %d rows", len(rows))
         return rows
 
@@ -452,25 +456,25 @@ class DatabaseManager:
         """Return True if a complaint with this ODI number is already stored."""
         sql = "SELECT 1 FROM complaints WHERE odi_number = :odi LIMIT 1"
         with self._get_connection() as conn:
-            return conn.execute(sql, {"odi": odi_number}).fetchone() is not None
+            return conn.execute(text(sql), {"odi": odi_number}).fetchone() is not None
 
     def recall_exists(self, campaign_number: str) -> bool:
         """Return True if a recall with this campaign number is already stored."""
         sql = "SELECT 1 FROM recalls WHERE campaign_number = :cn LIMIT 1"
         with self._get_connection() as conn:
-            return conn.execute(sql, {"cn": campaign_number}).fetchone() is not None
+            return conn.execute(text(sql), {"cn": campaign_number}).fetchone() is not None
 
     # READ — Counts & Stats
 
     def count_complaints(self) -> int:
         """Return total number of complaints in the database."""
         with self._get_connection() as conn:
-            return conn.execute("SELECT COUNT(*) FROM complaints").fetchone()[0]
+            return conn.execute(text("SELECT COUNT(*) FROM complaints")).scalar()
 
     def count_recalls(self) -> int:
         """Return total number of recalls in the database."""
         with self._get_connection() as conn:
-            return conn.execute("SELECT COUNT(*) FROM recalls").fetchone()[0]
+            return conn.execute(text("SELECT COUNT(*) FROM recalls")).scalar()
 
     def get_stats(self) -> dict:
         """
@@ -487,21 +491,21 @@ class DatabaseManager:
         """
         with self._get_connection() as conn:
             total_complaints = conn.execute(
-                "SELECT COUNT(*) FROM complaints"
-            ).fetchone()[0]
+                text("SELECT COUNT(*) FROM complaints")
+            ).scalar()
 
             total_recalls = conn.execute(
-                "SELECT COUNT(*) FROM recalls"
-            ).fetchone()[0]
+                text("SELECT COUNT(*) FROM recalls")
+            ).scalar()
 
             manufacturers = [
                 row[0] for row in conn.execute(
-                    "SELECT DISTINCT make FROM complaints ORDER BY make"
+                    text("SELECT DISTINCT make FROM complaints ORDER BY make")
                 ).fetchall()
             ]
 
             year_row = conn.execute(
-                "SELECT MIN(model_year), MAX(model_year) FROM complaints"
+                text("SELECT MIN(model_year), MAX(model_year) FROM complaints")
             ).fetchone()
 
         stats = {
@@ -519,10 +523,10 @@ class DatabaseManager:
         )
         return stats
 
-    # Dunder 
+    # Dunder
 
     def __repr__(self) -> str:
-        return f"DatabaseManager(db_path='{self.db_path}')"
+        return f"DatabaseManager(db_url='{self.db_url[:40]}')"
 
     def __enter__(self):
         return self

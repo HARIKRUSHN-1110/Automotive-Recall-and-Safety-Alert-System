@@ -18,10 +18,11 @@ Main entry point:
 import logging
 import time
 from dataclasses import dataclass, field
-
+from dotenv import load_dotenv
+load_dotenv()
 from src.data_ingestion.database import DatabaseManager
 from src.data_ingestion.nhtsa_client import NHTSAClient
-
+import os
 logger = logging.getLogger(__name__)
 
 # Vehicle Catalogue
@@ -58,6 +59,12 @@ YEAR_END   = 2025
 # Polite delay between API calls (seconds)
 # Prevents hammering the NHTSA server
 REQUEST_DELAY = 0.5
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DB_PATH    = os.path.join(ROOT, "data", "automotive_recall.db")
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    f"sqlite:///{DB_PATH}"   # f-string so DB_PATH gets substituted
+)
 
 # Progress Tracking
 
@@ -112,10 +119,10 @@ class DataIngestionPipeline:
 
     def __init__(
         self,
-        db_path: str = "data/automotive_recall.db",
+        db_path:       str = DATABASE_URL,
         request_delay: float = REQUEST_DELAY,
     ):
-        self.db      = DatabaseManager(db_path=db_path)
+        self.db      = DatabaseManager(db_url=DATABASE_URL)
         self.client  = NHTSAClient()
         self.delay   = request_delay
         self.stats   = IngestionStats()
