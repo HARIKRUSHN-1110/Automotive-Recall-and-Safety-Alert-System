@@ -204,7 +204,7 @@ class ModelServer:
                 filename = filename,
                 local_dir = directory,
             )
-            with open(cached, "rb") as f:
+            with os.file(cached, "rb") as f:
                 return pickle.load(f)
             
         raise FileNotFoundError(
