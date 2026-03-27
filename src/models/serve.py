@@ -189,7 +189,7 @@ class ModelServer:
         """
         path = os.path.join(directory, filename)
 
-        if os.file.exists(path):
+        if os.path.exists(path):
             with open(path, "rb") as f:
                 return pickle.load(f)
             
@@ -204,7 +204,7 @@ class ModelServer:
                 filename = filename,
                 local_dir = directory,
             )
-            with os.file(cached, "rb") as f:
+            with open(cached, "rb") as f:
                 return pickle.load(f)
             
         raise FileNotFoundError(
