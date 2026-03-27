@@ -14,7 +14,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 from collections import Counter
 from sqlalchemy import create_engine, text
-
+import traceback
 # Make src/ importable from any working directory
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if ROOT not in sys.path:
@@ -508,7 +508,7 @@ def get_risk_assessment(make: str, model: str, year: int) -> dict:
             "result":     None,
             "complaints": [],
             "recalls":    [],
-            "error":      str(e),
+            "error":      traceback.format_exc(),
         }
 
 # Risk gauge plotly
