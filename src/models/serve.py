@@ -195,13 +195,13 @@ class ModelServer:
             
         if HF_REPO_ID:
             logger.info(
-                f"Downloading model artifact from Huggingface Hub (%s)...",
-                filename, HF_REPO_ID,
+                "Downloading model artifact from Huggingface Hub (%s)...",
+                filename,
             )
             os.makedirs(directory, exist_ok=True)
             cached = hf_hub_download(
-                repo_id = HF_REPO_ID,
-                filename = filename,
+                repo_id   = HF_REPO_ID,
+                filename  = filename,
                 local_dir = directory,
             )
             with open(cached, "rb") as f:
@@ -209,7 +209,6 @@ class ModelServer:
             
         raise FileNotFoundError(
             f"Model artifact not found: {path}\n"
-            f"Have you run the training notebook? "
             f"Either run the training notebook or set HF_REPO_ID in .env"
         )
 
