@@ -170,10 +170,17 @@ st.markdown("""
     header     {visibility: hidden;}
 
     /* Hide deploy button, github link, hosted by */
-    .stDeployButton       {display: none;}
-    [data-testid="stToolbar"] {display: none;}
-    [data-testid="stDecoration"] {display: none;}
-    [data-testid="stStatusWidget"] {display: none;}
+    .stDeployButton                    {display: none !important;}
+    [data-testid="stToolbar"]          {display: none !important;}
+    [data-testid="stDecoration"]       {display: none !important;}
+    [data-testid="stStatusWidget"]     {display: none !important;}
+    [data-testid="stMainMenuButton"]   {display: none !important;}
+
+    /* Hide hosted with streamlit banner — mobile */
+    .viewerBadge_container__r5tak     {display: none !important;}
+    .viewerBadge_link__qRIco          {display: none !important;}
+    #stDecoration                     {display: none !important;}
+    iframe[title="streamlit_badge"]   {display: none !important;}
 </style>
 """, unsafe_allow_html=True)
 
