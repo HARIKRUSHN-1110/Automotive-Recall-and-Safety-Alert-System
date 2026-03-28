@@ -167,6 +167,13 @@ st.markdown("""
     /* Hide Streamlit branding */
     #MainMenu {visibility: hidden;}
     footer     {visibility: hidden;}
+    header     {visibility: hidden;}
+
+    /* Hide deploy button, github link, hosted by */
+    .stDeployButton       {display: none;}
+    [data-testid="stToolbar"] {display: none;}
+    [data-testid="stDecoration"] {display: none;}
+    [data-testid="stStatusWidget"] {display: none;}
 </style>
 """, unsafe_allow_html=True)
 
