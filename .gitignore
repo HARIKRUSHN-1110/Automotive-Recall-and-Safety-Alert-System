@@ -3,3 +3,4 @@ __pycache__/
 .env
 venv/
 data/*.db
+api_test_run_information
