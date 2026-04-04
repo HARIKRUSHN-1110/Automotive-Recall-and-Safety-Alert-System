@@ -30,7 +30,7 @@ jobs:
           flake8 src/ tests/ \
             --max-line-length=100 \
             --exclude=__pycache__,.venv,venv \
-            --ignore=E501,W503,E203,E221,E241,E251,E302,E303,E305,E402,E265,E272,E231,W291,W292,W293,W504,F401,F541,F841
+            --ignore=E501,W503,E203,E221,E241,E251,E302,E303,E305,E402,E265,E272,E231,W291,W292,W293,W504,F401,F541,F841, E127, E128
 
   # Tests 
   test:

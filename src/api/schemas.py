@@ -20,15 +20,28 @@ class PredictResponse(BaseModel):
     make: str = Field(..., example="BMW")
     model: str = Field(..., example="3 Series")
     year: int = Field(..., example=2020)
-    risk_score: float = Field(..., ge=0, le=100, example=68.5,
-        description="Recall risk score 0 (safe) to 100 (high risk)")
-    risk_label: str = Field(..., example="medium",
-        description="low | medium | high")
+    risk_score: float = Field(
+        ...,
+        ge=0,
+        le=100,
+        example=68.5,
+        description="Recall risk score 0 (safe) to 100 (high risk)"
+    )
+    risk_label: str = Field(
+        ...,
+        example="medium",
+        description="low | medium | high"
+    )
     confidence: float = Field(..., ge=0, le=1, example=0.82)
     complaint_count: int = Field(..., example=143)
-    top_components: list[str] = Field(default=[],
-        example=["ENGINE", "FUEL SYSTEM"])
-    message: str = Field(..., example="Prediction based on 143 complaints.")
+    top_components: list[str] = Field(
+        default=[],
+        example=["ENGINE", "FUEL SYSTEM"]
+    )
+    message: str = Field(
+        ...,
+        example="Prediction based on 143 complaints."
+    )
 
 # /complaints
 class ComplaintRecord(BaseModel):
@@ -36,8 +49,14 @@ class ComplaintRecord(BaseModel):
     make: str = Field(..., example="BMW")
     model: str = Field(..., example="3 Series")
     year: int = Field(..., example=2020)
-    component: Optional[str] = Field(None, example="ENGINE AND ENGINE COOLING")
-    summary: Optional[str] = Field(None, example="Vehicle stalled at highway speed.")
+    component: Optional[str] = Field(
+        None,
+        example="ENGINE AND ENGINE COOLING"
+    )
+    summary: Optional[str] = Field(
+        None,
+        example="Vehicle stalled at highway speed."
+    )
     crash: Optional[bool] = Field(None)
     fire: Optional[bool] = Field(None)
     injuries: Optional[int] = Field(None, example=0)
@@ -57,18 +76,29 @@ class ComplaintsResponse(BaseModel):
 # /recalls
 class RecallRecord(BaseModel):
     campaign_number: Optional[str] = Field(None, example="23V123000")
-    manufacturer: Optional[str] = Field(None, example="BMW OF NORTH AMERICA, LLC")
+    manufacturer: Optional[str] = Field(
+        None,
+        example="BMW OF NORTH AMERICA, LLC"
+    )
     make: str = Field(..., example="BMW")
     model: str = Field(..., example="3 Series")
     year: int = Field(..., example=2020)
     component: Optional[str] = Field(None, example="FUEL SYSTEM, GASOLINE")
-    summary: Optional[str] = Field(None, example="Fuel may leak from the pump.")
+    summary: Optional[str] = Field(
+        None,
+        example="Fuel may leak from the pump."
+    )
     consequence: Optional[str] = Field(None, example="Fire risk.")
-    remedy: Optional[str] = Field(None, example="Dealers will replace the fuel pump.")
+    remedy: Optional[str] = Field(
+        None,
+        example="Dealers will replace the fuel pump."
+    )
     notes: Optional[str] = Field(None)
     recall_date: Optional[str] = Field(None, example="2023-06-01")
-    park_it: Optional[bool] = Field(None,
-        description="Whether NHTSA recommends parking the vehicle until repaired")
+    park_it: Optional[bool] = Field(
+        None,
+        description="Whether NHTSA recommends parking until repaired"
+    )
 
 class RecallsResponse(BaseModel):
     make: str
