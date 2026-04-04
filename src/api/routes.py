@@ -51,7 +51,8 @@ def _sibling_url(filename: str) -> str:
     Replaces the filename in HUGGINGFACE_MODEL_URL with the given filename.
     Assumes all artifacts live in the same HuggingFace repo/folder.
     """
-    base = HUGGINGFACE_MODEL_URL.rsplit("/", 1)[0]   #strip last segment
+    # strip last segment
+    base = HUGGINGFACE_MODEL_URL.rsplit("/", 1)[0]
     return f"{base}/{filename}"
 
 # Artifact cache (download once per server process, reuse forever)
@@ -266,7 +267,6 @@ def predict_recall_risk(
 @router.get("/complaints", response_model=ComplaintsResponse,
     summary="Get NHTSA complaints for a vehicle",
     description="Returns complaint records from Supabase. Max 50 per request.")
-
 def get_complaints(
     make:  str = Query(..., example="BMW",      description="Vehicle manufacturer"),
     model: str = Query(..., example="3 Series", description="Vehicle model"),
