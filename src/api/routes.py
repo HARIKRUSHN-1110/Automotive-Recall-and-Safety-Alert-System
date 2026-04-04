@@ -5,9 +5,9 @@ Feature matrix (must match training exactly — 1025 features):
     [TF-IDF(1000) | component_onehot(20) | year | vehicle_age | crash | fire]
 
 Three HuggingFace artifacts:
-    HUGGINGFACE_MODEL_URL      → model.pkl       (LGBMClassifier)
-    HUGGINGFACE_VECTORIZER_URL → vectorizer.pkl  (TF-IDF, 1000 features)
-    HUGGINGFACE_ENCODER_URL    → label_encoder.pkl (component one-hot encoder)
+    HUGGINGFACE_MODEL_URL → model.pkl(LGBMClassifier)
+    HUGGINGFACE_VECTORIZER_URL→ vectorizer.pkl(TF-IDF, 1000 features)
+    HUGGINGFACE_ENCODER_URL → label_encoder.pkl(component one-hot encoder)
 """
 
 from fastapi import APIRouter, HTTPException, Query
@@ -37,9 +37,9 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["Recall System"])
 
-DATABASE_URL           = os.getenv("DATABASE_URL")
-HUGGINGFACE_MODEL_URL  = os.getenv("HUGGINGFACE_MODEL_URL")   # model.pkl
-CURRENT_YEAR           = 2026
+DATABASE_URL = os.getenv("DATABASE_URL")
+HUGGINGFACE_MODEL_URL = os.getenv("HUGGINGFACE_MODEL_URL")  # model.pkl
+CURRENT_YEAR = 2026
 
 # ignoreswarning about missing feature names
 import warnings
@@ -51,7 +51,7 @@ def _sibling_url(filename: str) -> str:
     Replaces the filename in HUGGINGFACE_MODEL_URL with the given filename.
     Assumes all artifacts live in the same HuggingFace repo/folder.
     """
-    base = HUGGINGFACE_MODEL_URL.rsplit("/", 1)[0]   # strip last segment
+    base = HUGGINGFACE_MODEL_URL.rsplit("/", 1)[0]   #strip last segment
     return f"{base}/{filename}"
 
 # Artifact cache (download once per server process, reuse forever)
@@ -99,8 +99,8 @@ def load_artifacts():
 
     logger.info("Downloading ML artifacts from HuggingFace...")
     _model_cache      = _download_pkl(HUGGINGFACE_MODEL_URL, "model")
-    _vectorizer_cache = _download_pkl(vectorizer_url,        "vectorizer")
-    _encoder_cache    = _download_pkl(encoder_url,           "label_encoder")
+    _vectorizer_cache = _download_pkl(vectorizer_url, "vectorizer")
+    _encoder_cache    = _download_pkl(encoder_url, "label_encoder")
     logger.info("All artifacts loaded successfully.")
 
     return _model_cache, _vectorizer_cache, _encoder_cache
@@ -142,7 +142,7 @@ def _build_feature_matrix(rows: list, vectorizer, encoder) -> csr_matrix:
 
         # Severity flags: crash + fire
         crash      = int(bool(row["crash"])) if row["crash"] is not None else 0
-        fire       = int(bool(row["fire"]))  if row["fire"]  is not None else 0
+        fire       = int(bool(row["fire"]))  if row["fire"] is not None else 0
         X_severity = csr_matrix([[crash, fire]])             # (1, 2)
 
         # Stack horizontally — same order as training
@@ -150,11 +150,18 @@ def _build_feature_matrix(rows: list, vectorizer, encoder) -> csr_matrix:
         feature_rows.append(X_row)
 
     # Stack all complaint rows vertically (n_complaints, 1025)
-    return hstack(feature_rows).T if len(feature_rows) == 1 else \
-           csr_matrix(np.vstack([r.toarray() for r in feature_rows]))
+    if len(feature_rows) == 1:
+        return feature_rows[0]
+    return csr_matrix(np.vstack([r.toarray() for r in feature_rows]))
 
 # DB connection
 def get_db_connection():
+    """
+    Establishes a connection to the Supabase database using
+    the DATABASE_URL environment variable.
+
+    Raises an HTTPException (503) if the connection fails.
+    """
     if not DATABASE_URL:
         raise HTTPException(status_code=503,
             detail="DATABASE_URL not set in .env")
@@ -171,9 +178,12 @@ def get_db_connection():
 # Utilities
 
 def risk_label_from_score(score: float) -> str:
-    if score < 40:   return "low"
-    elif score < 70: return "medium"
-    else:            return "high"
+    if score < 40:   
+        return "low"
+    elif score < 70: 
+        return "medium"
+    else:            
+        return "high"
 
 
 def extract_top_components(rows, top_n=3) -> list[str]:
@@ -256,6 +266,7 @@ def predict_recall_risk(
 @router.get("/complaints", response_model=ComplaintsResponse,
     summary="Get NHTSA complaints for a vehicle",
     description="Returns complaint records from Supabase. Max 50 per request.")
+
 def get_complaints(
     make:  str = Query(..., example="BMW",      description="Vehicle manufacturer"),
     model: str = Query(..., example="3 Series", description="Vehicle model"),
@@ -294,25 +305,40 @@ def get_complaints(
 
         complaints = [
             ComplaintRecord(
-                odi_number       = str(r["odi_number"])        if r["odi_number"]        else None,
-                make             = r["make"],
-                model            = r["model"],
-                year             = r["model_year"],
-                component        = r["component"],
-                summary          = r["summary"],
-                crash            = bool(r["crash"])            if r["crash"]            is not None else None,
-                fire             = bool(r["fire"])             if r["fire"]             is not None else None,
-                injuries         = r["injuries"],
-                deaths           = r["deaths"],
-                date_complained  = str(r["date_complained"])   if r["date_complained"]  else None,
-                date_of_incident = str(r["date_of_incident"])  if r["date_of_incident"] else None,
-                vehicle_speed    = str(r["vehicle_speed"])     if r["vehicle_speed"]    else None,
+                odi_number=str(r["odi_number"]) if r["odi_number"] else None,
+                make=r["make"],
+                model=r["model"],
+                year=r["model_year"],
+                component=r["component"],
+                summary=r["summary"],
+                crash=(
+                    bool(r["crash"]) if r["crash"] is not None else None
+                ),
+                fire=(
+                    bool(r["fire"]) if r["fire"] is not None else None
+                ),
+                injuries=r["injuries"],
+                deaths=r["deaths"],
+                date_complained=(
+                    str(r["date_complained"])
+                    if r["date_complained"] else None
+                ),
+                date_of_incident=(
+                    str(r["date_of_incident"])
+                    if r["date_of_incident"] else None
+                ),
+                vehicle_speed=(
+                    str(r["vehicle_speed"])
+                    if r["vehicle_speed"] else None
+                ),
             )
             for r in rows
         ]
 
         return ComplaintsResponse(
-            make=make, model=model, year=year,
+            make=make,
+            model=model,
+            year=year,
             total_found=total,
             returned=len(complaints),
             complaints=complaints,
@@ -362,14 +388,20 @@ def get_recalls(
                 consequence     = r["consequence"],
                 remedy          = r["remedy"],
                 notes           = r["notes"],
-                recall_date     = str(r["recall_date"]) if r["recall_date"] else None,
-                park_it         = bool(r["park_it"])    if r["park_it"] is not None else None,
+                recall_date=(
+                    str(r["recall_date"]) if r["recall_date"] else None
+                ),
+                park_it=(
+                    bool(r["park_it"]) if r["park_it"] is not None else None
+                ),
             )
             for r in rows
         ]
 
         return RecallsResponse(
-            make=make, model=model, year=year,
+            make=make,
+            model=model,
+            year=year,
             total_recalls=len(recalls),
             recalls=recalls,
         )
@@ -408,13 +440,19 @@ def get_stats():
         date_row = cur.fetchone()
 
         return StatsResponse(
-            total_complaints      = total_complaints,
-            total_recalls         = total_recalls,
-            manufacturers_covered = manufacturers_covered,
-            date_range_start      = str(date_row["start_date"]) if date_row["start_date"] else None,
-            date_range_end        = str(date_row["end_date"])   if date_row["end_date"]   else None,
-            last_updated          = datetime.now().isoformat(),
-            api_version           = "1.0.0"
+            total_complaints=total_complaints,
+            total_recalls=total_recalls,
+            manufacturers_covered=manufacturers_covered,
+            date_range_start=(
+                str(date_row["start_date"])
+                if date_row["start_date"] else None
+            ),
+            date_range_end=(
+                str(date_row["end_date"])
+                if date_row["end_date"] else None
+            ),
+            last_updated=datetime.now().isoformat(),
+            api_version="1.0.0"
         )
     except HTTPException:
         raise
