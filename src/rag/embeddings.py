@@ -24,7 +24,7 @@ from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
 import zipfile
 import requests
-
+import tarfile
 load_dotenv()
 logger = logging.getLogger(__name__)
 
