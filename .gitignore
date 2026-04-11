@@ -4,3 +4,11 @@ __pycache__/
 venv/
 data/*.db
 api_test_run_information
+data/chroma_db/
+data/raw/
+data/processed/
+data/models/
+*.bin
+*.pickle
+index_metadata.pickle
+chroma.sqlite3

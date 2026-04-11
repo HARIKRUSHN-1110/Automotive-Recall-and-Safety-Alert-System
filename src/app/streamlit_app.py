@@ -1,12 +1,11 @@
 """
-streamlit_app.py — Streamlit Web Application.
+streamlit_app.py: Streamlit Web Application.
 
-Run from project root:
-    streamlit run src/app/streamlit_app.py
 """
 
 import os
 import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 import warnings
 import pandas as pd
 import streamlit as st
@@ -15,6 +14,9 @@ import plotly.express as px
 from collections import Counter
 from sqlalchemy import create_engine, text
 import traceback
+from src.rag.chat_ui import render_chat_tab
+import logging
+
 # Make src/ importable from any working directory
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if ROOT not in sys.path:
@@ -23,8 +25,15 @@ if ROOT not in sys.path:
 from dotenv import load_dotenv
 load_dotenv()
 
-# Page config — must be the FIRST Streamlit call
+warnings.filterwarnings("ignore", message="Tried to instantiate class '__path__._path'")
+warnings.filterwarnings("ignore", category=UserWarning, module="torch")
 
+# supress streamlit telemetry warnings
+logging.getLogger("chromadb.telemetry.product.posthog").setLevel(logging.CRITICAL)
+logging.getLogger("chromadb.telemetry").setLevel(logging.CRITICAL)
+logging.getLogger("torch").setLevel(logging.CRITICAL)
+
+# Page config — must be the first Streamlit call
 st.set_page_config(
     page_title = "AutoSafe — Recall Risk Checker",
     page_icon  = "🚗",
@@ -45,7 +54,6 @@ DATABASE_URL = os.getenv(
     f"sqlite:///{DB_PATH}"
 )
 
-
 @st.cache_resource(show_spinner=False)
 def get_engine():
     """
@@ -53,7 +61,6 @@ def get_engine():
     Works with both PostgreSQL (production) and SQLite (local fallback).
     """
     return create_engine(DATABASE_URL)
-
 
 def db_query(sql: str, params: dict = None) -> list:
     """
@@ -65,30 +72,26 @@ def db_query(sql: str, params: dict = None) -> list:
         cursor = conn.execute(text(sql), params or {})
         return [dict(row) for row in cursor.mappings().fetchall()]
 
-
 def db_scalar(sql: str, params: dict = None):
     """Run a query returning a single value (COUNT, MIN, MAX etc.)."""
     engine = get_engine()
     with engine.connect() as conn:
         return conn.execute(text(sql), params or {}).scalar()
 
-
 # Lazy-load model server
-# Loaded once on first prediction, reused for every subsequent
-# search. Loading takes ~200ms — we don't want it on startup.
+# Loaded once on first prediction, reused for every subsequent search.
 
 @st.cache_resource(show_spinner=False)
 def get_model_server():
     """
-    Load and return the ModelServer singleton.
-    @st.cache_resource means this runs ONCE per app session —
+    Load and return the ModelServer.
+    @st.cache_resource means this runs ONCE per app session, so
     the loaded model stays in memory across all user interactions.
     """
     from src.models.serve import ModelServer
     server = ModelServer()
     server.load_model()
     return server
-
 
 @st.cache_resource(show_spinner=False)
 def get_text_processor():
@@ -97,9 +100,6 @@ def get_text_processor():
     return TextPreprocessor(db_path=DB_PATH)
 
 # Custom CSS
-# Streamlit's default styling is functional but plain.
-# A small amount of CSS makes it look significantly more
-# professional without fighting the framework.
 
 st.markdown("""
 <style>
@@ -257,7 +257,7 @@ def render_sidebar():
             st.markdown("""
             AutoSafe uses machine learning to predict
             whether a vehicle is at risk of a future
-            safety recall — **before** it's officially announced.
+            safety recall, **before** it's officially announced.
 
             Enter any make, model, and year to get an
             instant risk assessment powered by real
@@ -267,11 +267,11 @@ def render_sidebar():
         # How it work
         with st.expander("How it works"):
             st.markdown("""
-            **1. Data collection**
-            We ingest real complaint data from the
-            US NHTSA database daily.
+            **1. Data collection : **
+            Ingested a real complaint data from the
+            US NHTSA database.
 
-            **2. Pattern recognition**
+            **2. Pattern recognition : **
             The LightGBM model analyses complaint
             text, components, severity flags and
             vehicle age to detect recall patterns.
@@ -287,7 +287,7 @@ def render_sidebar():
 
         # Dataset stats
         st.divider()
-        st.markdown("### 📊 Dataset")
+        st.markdown("### Dataset")
         stats = get_db_stats()
         col1, col2 = st.columns(2)
         with col1:
@@ -300,7 +300,7 @@ def render_sidebar():
         # Data source
         st.divider()
         st.caption(
-            "Data source: [NHTSA](https://api.nhtsa.gov/) "
+            "Data source: [NHTSA](https://www.nhtsa.gov/) "
             "public complaints & recalls database.\n\n"
             "⚠️ For informational purposes only. "
             "Always check official NHTSA records."
@@ -338,7 +338,7 @@ def render_search_form() -> dict:
         )
         return None
 
-    st.markdown("### 🔍 Search a Vehicle")
+    st.markdown("### Search a Vehicle")
 
     col1, col2, col3 = st.columns([2, 2, 1])
 
@@ -526,7 +526,6 @@ def get_risk_assessment(make: str, model: str, year: int) -> dict:
         }
 
 # Risk gauge plotly
-
 def render_risk_gauge(score: int, label: str):
 
     if score < 40:
@@ -599,7 +598,7 @@ def render_complaints_table(complaints: list):
     st.dataframe(df, use_container_width=True, hide_index=True)
 
     # Expandable full text for each complaint
-    st.markdown("#### 🔍 Full Complaint Text")
+    st.markdown("#### Full Complaint Text")
     for i, c in enumerate(complaints[:10]):
         summary = c.get("summary") or "No summary available"
         date    = c.get("date_complained") or "Unknown date"
@@ -633,7 +632,7 @@ def render_recalls_section(recalls: list, make: str, model: str, year: int):
         park_it  = rec.get("park_it", 0)
 
         # Label shows campaign # and date — enough to identify at a glance
-        label = f"📌 {campaign}  |  {date}  |  {comp[:50]}"
+        label = f" {campaign}  |  {date}  |  {comp[:50]}"
 
         with st.expander(label, expanded=(len(recalls) == 1)):
             if park_it:
@@ -644,16 +643,13 @@ def render_recalls_section(recalls: list, make: str, model: str, year: int):
             st.markdown(f"**Remedy:** {rec.get('remedy') or 'N/A'}")
 
             # Official NHTSA link
-            nhtsa_link = f"https://www.nhtsa.gov/recalls?nhtsaId={campaign}"
+            nhtsa_link = f"https://www.nhtsa.gov/recalls"
             st.markdown(f"🔗 [View official NHTSA recall page]({nhtsa_link})")
-
 
 @st.cache_data(show_spinner=False)
 def get_complaints_for_charts(make: str, model: str, year: int) -> dict:
     """
     Fetch all complaints for this vehicle for charting.
-    Separate from the 20-complaint limit used for prediction —
-    charts need the full history for accurate trend lines.
     """
     try:
         rows = db_query(
@@ -826,7 +822,7 @@ def render_risk_assessment(search: dict):
     year  = search["year"]
 
     st.divider()
-    st.markdown(f"### 📊 Risk Assessment — {make} {model} {year}")
+    st.markdown(f"### Risk Assessment — {make} {model} {year}")
 
     # Run prediction
     with st.spinner("Analysing complaints and predicting recall risk..."):
@@ -907,11 +903,9 @@ def render_risk_assessment(search: dict):
 
         # Model confidence note
         st.markdown("**About this score**")
-        st.caption(
-            f"Score based on {complaint_count} complaint(s). "
-            f"Model threshold: {result.threshold:.3f}. "
-            f"Inference time: {result.elapsed_ms:.0f}ms."
-        )
+        st.caption(f"Score based on {complaint_count} complaint(s).")
+        st.caption(f"Model threshold: {result.threshold:.3f}.")
+        st.caption(f"Inference time: {result.elapsed_ms:.0f}ms.")
 
         if complaint_count == 0:
             st.warning(
@@ -926,13 +920,13 @@ def render_risk_assessment(search: dict):
 
     if result.risk_label == "High":
         st.error(
-            "🔴 **High Risk** — This vehicle's complaint pattern resembles "
+            "**High Risk :** This vehicle's complaint pattern resembles "
             "vehicles that were subsequently recalled. We recommend checking "
             "the official NHTSA database and contacting your dealer."
         )
     elif result.risk_label == "Medium":
         st.warning(
-            "🟡 **Medium Risk** — Some elevated complaint signals detected. "
+            "**Medium Risk :** Some elevated complaint signals detected. "
             "Monitor this vehicle for new complaints and stay alert for "
             "official recall notices."
         )
@@ -943,9 +937,7 @@ def render_risk_assessment(search: dict):
         )
 
     #NHTSA link
-    nhtsa_url = (
-        f"https://www.nhtsa.gov/vehicle/{make}/{model}/{year}/4DR"
-    )
+    nhtsa_url = (f"https://www.nhtsa.gov/recalls")
     st.markdown(
         f"🔗 [Check official NHTSA records for {make} {model} {year}]({nhtsa_url})",
         unsafe_allow_html=False,
@@ -963,43 +955,46 @@ def main():
     render_sidebar()
     render_header()
     render_search_form_result = render_search_form()
+    tab1, tab2 = st.tabs(["🔍 Risk Assessment", "💬 Ask AI"])
+    with tab1:
+        if render_search_form_result:
+            render_risk_assessment(render_search_form_result)
+        else:
+            # Landing state — no search yet
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown("""
+            <div style="text-align:center; padding: 3rem; color: #888;">
+                <div style="font-size: 4rem;">🚗</div>
+                <h3 style="color: #444;">Select a vehicle above to check its recall risk</h3>
+                <p>Search any make, model, and year from our database of 179,000+ complaints</p>
+            </div>
+            """, unsafe_allow_html=True)
 
-    if render_search_form_result:
-        render_risk_assessment(render_search_form_result)
-    else:
-        # Landing state — no search yet
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("""
-        <div style="text-align:center; padding: 3rem; color: #888;">
-            <div style="font-size: 4rem;">🚗</div>
-            <h3 style="color: #444;">Select a vehicle above to check its recall risk</h3>
-            <p>Search any make, model, and year from our database of 179,000+ complaints</p>
-        </div>
-        """, unsafe_allow_html=True)
+            # Show example vehicles as inspiration
+            st.markdown("#### Try these examples:")
+            examples = [
+                ("BMW",     "X5",      2019),
+                ("TOYOTA",  "Camry",   2020),
+                ("AUDI",    "A3",   2020),
+                ("TESLA",   "Model 3", 2021),
+            ]
 
-        # Show example vehicles as inspiration
-        st.markdown("#### 💡 Try these examples:")
-        examples = [
-            ("BMW",     "X5",      2019),
-            ("TOYOTA",  "Camry",   2020),
-            ("FORD",    "F-150",   2018),
-            ("TESLA",   "Model 3", 2021),
-        ]
-
-        cols = st.columns(len(examples))
-        for col, (make, model, year) in zip(cols, examples):
-            with col:
-                if st.button(
-                    f"{make}\n{model} {year}",
-                    key             = f"example_{make}_{model}_{year}",
-                    use_container_width = True,
-                ):
-                    st.session_state["last_search"] = {
-                        "make":  make,
-                        "model": model,
-                        "year":  year,
-                    }
-                    st.rerun()
+            cols = st.columns(len(examples))
+            for col, (make, model, year) in zip(cols, examples):
+                with col:
+                    if st.button(
+                        f"{make}\n{model} {year}",
+                        key             = f"example_{make}_{model}_{year}",
+                        use_container_width = True,
+                    ):
+                        st.session_state["last_search"] = {
+                            "make":  make,
+                            "model": model,
+                            "year":  year,
+                        }
+                        st.rerun()
+    with tab2:
+        render_chat_tab()
 
 if __name__ == "__main__":
     main()
