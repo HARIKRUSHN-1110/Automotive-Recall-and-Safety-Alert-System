@@ -2,7 +2,7 @@ requests
 urllib3
 tenacity
 pandas
-numpy
+numpy==1.26.4
 matplotlib
 nltk
 scipy

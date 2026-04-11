@@ -22,6 +22,8 @@ import chromadb
 from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
+import zipfile
+import requests
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -33,7 +35,7 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 # On Streamlit Cloud this maps to a writable directory
 CHROMA_PATH = os.getenv("CHROMA_PATH", "data/chroma_db")
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
-
+HF_CHROMA_URL = os.getenv("HUGGINGFACE_CHROMA_URL")
 # ChromaDB collection names
 COMPLAINTS_COLLECTION = "complaints"
 RECALLS_COLLECTION = "recalls"
@@ -336,28 +338,53 @@ def build_full_index(force_rebuild: bool = False) -> dict:
         "recalls": recalls_count,
     }
 
+def _download_index_from_hf():
+    """Download pre-built ChromaDB index from HuggingFace."""
+    if not HF_CHROMA_URL:
+        return False
+    try:
+        logger.info("Downloading ChromaDB index from HuggingFace...")
+        r = requests.get(HF_CHROMA_URL, timeout=120)
+        r.raise_for_status()
+        zip_path = "data/chroma_db.zip"
+        with open(zip_path, "wb") as f:
+            f.write(r.content)
+        with zipfile.ZipFile(zip_path, "r") as z:
+            z.extractall("data/")
+        os.remove(zip_path)
+        logger.info("ChromaDB index downloaded and extracted.")
+        return True
+    except Exception as e:
+        logger.error(f"HuggingFace index download failed: {e}")
+        return False
+    
 def get_index_status() -> dict:
-    """
-    Returns how many documents are currently in each collection.
-    Useful for health checks and the /stats endpoint.
-    """
     try:
         client = get_chroma_client()
         complaints_col = client.get_or_create_collection(COMPLAINTS_COLLECTION)
+        
+        if complaints_col.count() == 0:
+            # Try downloading pre-built index from HuggingFace
+            downloaded = _download_index_from_hf()
+            if downloaded:
+                # Reset client to pick up new files
+                global _chroma_client
+                _chroma_client = None
+                client = get_chroma_client()
+                complaints_col = client.get_or_create_collection(
+                    COMPLAINTS_COLLECTION
+                )
+
         recalls_col = client.get_or_create_collection(RECALLS_COLLECTION)
         return {
-            "complaints_indexed": complaints_col.count(),
-            "recalls_indexed": recalls_col.count(),
+            "complaints_indexed": int(complaints_col.count()),
+            "recalls_indexed": int(recalls_col.count()),
             "chroma_path": CHROMA_PATH,
             "embedding_model": EMBEDDING_MODEL,
         }
     except Exception as e:
         logger.error(f"Could not get index status: {e}")
-        return {
-            "complaints_indexed": 0,
-            "recalls_indexed": 0,
-            "error": str(e),
-        }
+        return {"complaints_indexed": 0, "recalls_indexed": 0, "error": str(e)}
 
 # CLI entrypoint to run directly to build the index
 # python -m src.rag.embeddings --force to force rebuild if it gets disconnected or damaged
