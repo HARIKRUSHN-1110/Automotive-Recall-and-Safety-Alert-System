@@ -136,25 +136,39 @@ def _inject_chat_css():
     """, unsafe_allow_html=True)
 
 def _ensure_index_ready():
-    """
-    Checks if ChromaDB index exists.
-    If not, triggers a build with a progress indicator.
-    Shows a warning if index is empty.
-    """
     status = get_status()
 
     if not status["ready"]:
-        st.warning(
-            "The search index is empty. Building it now — "
-            "this takes a few minutes on first run..."
-        )
-        with st.spinner("Embedding complaints and recalls into ChromaDB..."):
-            result = build_full_index()
-        st.success(
-            f"Index ready: {result['complaints']:,} complaints + "
-            f"{result['recalls']:,} recalls indexed."
-        )
-        st.rerun()
+        # Try downloading from HuggingFace first
+        st.warning("Index not found. Downloading from HuggingFace...")
+        with st.spinner("Downloading pre-built index..."):
+            from src.rag.embeddings import _download_index_from_hf, get_chroma_client
+            import src.rag.embeddings as emb
+
+            downloaded = _download_index_from_hf()
+
+            if downloaded:
+                # Reset chroma client to pick up new files
+                emb.get_chroma_client = None
+                status = get_status()
+
+        if status["ready"]:
+            st.success(
+                f"Index loaded: "
+                f"{status['complaints_indexed']:,} complaints + "
+                f"{status['recalls_indexed']:,} recalls."
+            )
+            st.rerun()
+        else:
+            # Only rebuild if download failed
+            st.warning("Download failed. Building index from scratch...")
+            with st.spinner("Embedding complaints and recalls..."):
+                result = build_full_index()
+            st.success(
+                f"Index ready: {result['complaints']:,} complaints + "
+                f"{result['recalls']:,} recalls indexed."
+            )
+            st.rerun()
 
     return status
 
