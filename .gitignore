@@ -12,3 +12,4 @@ data/models/
 *.pickle
 index_metadata.pickle
 chroma.sqlite3
+data/chroma_db.tar.gz
