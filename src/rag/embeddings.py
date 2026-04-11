@@ -339,23 +339,28 @@ def build_full_index(force_rebuild: bool = False) -> dict:
     }
 
 def _download_index_from_hf():
-    """Download pre-built ChromaDB index from HuggingFace."""
     if not HF_CHROMA_URL:
+        logger.error("HUGGINGFACE_CHROMA_URL is not set in environment")
         return False
     try:
-        logger.info("Downloading ChromaDB index from HuggingFace...")
-        r = requests.get(HF_CHROMA_URL, timeout=120)
+        logger.info(f"Downloading ChromaDB index from: {HF_CHROMA_URL}")
+        r = requests.get(HF_CHROMA_URL, timeout=300)
+        logger.info(f"Download response status: {r.status_code}")
         r.raise_for_status()
-        zip_path = "data/chroma_db.zip"
-        with open(zip_path, "wb") as f:
+        
+        tar_path = "data/chroma_db.tar.gz"
+        os.makedirs("data", exist_ok=True)
+        with open(tar_path, "wb") as f:
             f.write(r.content)
-        with zipfile.ZipFile(zip_path, "r") as z:
-            z.extractall("data/")
-        os.remove(zip_path)
-        logger.info("ChromaDB index downloaded and extracted.")
+        logger.info(f"Downloaded file size: {os.path.getsize(tar_path)} bytes")
+        
+        with tarfile.open(tar_path, "r:gz") as tar:
+            tar.extractall("data/")
+        os.remove(tar_path)
+        logger.info("ChromaDB index downloaded and extracted successfully.")
         return True
     except Exception as e:
-        logger.error(f"HuggingFace index download failed: {e}")
+        logger.error(f"HuggingFace index download failed: {type(e).__name__}: {e}")
         return False
     
 def get_index_status() -> dict:

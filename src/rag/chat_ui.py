@@ -142,14 +142,14 @@ def _ensure_index_ready():
         # Try downloading from HuggingFace first
         st.warning("Index not found. Downloading from HuggingFace...")
         with st.spinner("Downloading pre-built index..."):
-            from src.rag.embeddings import _download_index_from_hf, get_chroma_client
+            from src.rag.embeddings import _download_index_from_hf, _chroma_client
             import src.rag.embeddings as emb
 
             downloaded = _download_index_from_hf()
 
             if downloaded:
                 # Reset chroma client to pick up new files
-                emb.get_chroma_client = None
+                emb._chroma_client = None
                 status = get_status()
 
         if status["ready"]:
