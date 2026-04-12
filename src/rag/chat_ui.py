@@ -281,9 +281,9 @@ def render_chat_tab():
                             icon = "🔔" if doc.doc_type == "recall" else "📋"
                             st.markdown(
                                 f"**{icon} {doc.doc_type.upper()} {i}"
-                                "<span style='color: ##ff4b4b; font weight: bold'> | </span>"
+                                "<span style='color: ##ff4b4b; font-weight: 1000;'>|</span>"
                                 f"{doc.make} {doc.model} {doc.year}"
-                                "<span style='color: ##ff4b4b; font weight: bold'> | </span>"
+                                "<span style='color: ##ff4b4b; font-weight: bold;'>|</span>"
                                 f"{score_pct}% match**",
                                 unsafe_allow_html=True
                             )
