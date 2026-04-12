@@ -278,10 +278,10 @@ def render_chat_tab():
                         st.markdown("##### 🗂️ NHTSA Internal Data")
                         for i, doc in enumerate(internal_docs, 1):
                             score_pct = int(doc.score * 100)
-                            icon = "🔴" if doc.doc_type == "recall" else "📋"
+                            icon = "🔔" if doc.doc_type == "recall" else "📋"
                             st.markdown(
-                                f"**{icon} {doc.doc_type.upper()} {i} — "
-                                f"{doc.make} {doc.model} {doc.year} — "
+                                f"**{icon} {doc.doc_type.upper()} {i} | "
+                                f"{doc.make} {doc.model} {doc.year} | "
                                 f"{score_pct}% match**"
                             )
                             st.text(
