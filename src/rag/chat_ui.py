@@ -280,9 +280,12 @@ def render_chat_tab():
                             score_pct = int(doc.score * 100)
                             icon = "🔔" if doc.doc_type == "recall" else "📋"
                             st.markdown(
-                                f"**{icon} {doc.doc_type.upper()} {i} | "
-                                f"{doc.make} {doc.model} {doc.year} | "
-                                f"{score_pct}% match**"
+                                f"**{icon} {doc.doc_type.upper()} {i}"
+                                "<span style='color: ##ff4b4b; font weight: bold'> | </span>"
+                                f"{doc.make} {doc.model} {doc.year}"
+                                "<span style='color: ##ff4b4b; font weight: bold'> | </span>"
+                                f"{score_pct}% match**",
+                                unsafe_allow_html=True
                             )
                             st.text(
                                 doc.text[:500] + "..."
