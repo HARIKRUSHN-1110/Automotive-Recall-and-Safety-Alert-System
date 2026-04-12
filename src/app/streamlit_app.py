@@ -311,7 +311,7 @@ def render_sidebar():
 def render_header():
     st.markdown("""
     <div class="main-header">
-        <h1>🚗 AutoSafe — Recall Risk Checker</h1>
+        <h1>🚗 AutoSafe : Recall Risk Checker</h1>
         <p>
             AI-powered early warning system for automotive recalls.
             Search any vehicle to get an instant safety risk assessment.
@@ -966,7 +966,7 @@ def main():
             <div style="text-align:center; padding: 3rem; color: #888;">
                 <div style="font-size: 4rem;">🚗</div>
                 <h3 style="color: #444;">Select a vehicle above to check its recall risk</h3>
-                <p>Search any make, model, and year from our database of 179,000+ complaints</p>
+                <p>Search any make, model, and year from our database of 180,000+ complaints</p>
             </div>
             """, unsafe_allow_html=True)
 

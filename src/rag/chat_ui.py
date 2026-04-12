@@ -248,7 +248,7 @@ def render_chat_tab():
         example_questions = [
             "Are there engine fires in BMW 3 Series?",
             "What are the most common complaints for Toyota Camry 2019?",
-            "Has the Ford F-150 been recalled for brake issues?",
+            "What recalls have been issued for Hyundai Creta in last 5 years?",
             "Which vehicles have the most deaths reported?",
         ]
         for i, question in enumerate(example_questions):
@@ -280,10 +280,8 @@ def render_chat_tab():
                             score_pct = int(doc.score * 100)
                             icon = "🔔" if doc.doc_type == "recall" else "📋"
                             st.markdown(
-                                f"**{icon} {doc.doc_type.upper()} {i}"
-                                "<span style='color: ##ff4b4b; font-weight: 1000;'>|</span>"
-                                f"{doc.make} {doc.model} {doc.year}"
-                                "<span style='color: ##ff4b4b; font-weight: bold;'>|</span>"
+                                f"**{icon} {doc.doc_type.upper()} {i} | "
+                                f"{doc.make} {doc.model} {doc.year} | "
                                 f"{score_pct}% match**",
                                 unsafe_allow_html=True
                             )
@@ -300,11 +298,12 @@ def render_chat_tab():
                             st.divider()
                         st.markdown("##### 🌐 Web Sources")
                         for i, r in enumerate(web_results, 1):
-                            st.markdown(f"**{i}. [{r.title}]({r.url})**")
+                            st.markdown(f"**{i}. [{r['title']}]({r['url']})**")
+                            st.caption(f"Relevance score: {r['score']:.2f}")
                             st.text(
-                                r.snippet[:500] + "..."
-                                if len(r.snippet) > 500
-                                else r.snippet
+                            r['snippet'][:500] + "..."
+                            if len(r['snippet']) > 500
+                            else r['snippet']
                             )
                             if i < len(web_results):
                                 st.divider()
@@ -355,7 +354,16 @@ def render_chat_tab():
             "sources": sources,
             "badge": quality_badges.get(quality, ""),
             "internal_docs": internal_docs,
-            "web_results": web_results,
+            "web_results": [
+                {  
+                "title": r.title,
+                "url": r.url,
+                "snippet": r.snippet,
+                "score": r.score,
+                }
+                for r in web_results
+            ],
+            "quality": quality,
         })
         st.session_state.chat_history.append({
             "role": "assistant", "content": answer,

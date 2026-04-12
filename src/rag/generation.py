@@ -47,8 +47,15 @@ Your rules:
 - If the vehicle is not in the NHTSA database, explain this honestly and
   use web sources to still provide useful information
 - Never speculate beyond what the documents say
-- Keep answers concise but complete (3-5 paragraphs maximum)
-- Use plain text, not markdown"""
+- Keep answers concise but complete (around 5-6 paragraphs maximum)
+- Use plain text, if needed then use markdown
+- Use bullet points, if needed then use numbered lists
+- Use markdown tables, if needed then use text tables
+- if user is asking about a comparision between vehicles, then compare them based on NHTSA data and web resouces as well
+  but prioritize NHTSA data if it is available.
+- if user is asking for a recommendation then get personal with himself
+  e.g. if i were you i would buy this car or i would not buy this car and also try to give strong reasons
+"""
 
 # Context builders
 
@@ -86,8 +93,22 @@ def _build_web_context(web_results: list) -> str:
 
     sections = ["\n=== WEB SEARCH RESULTS (via Tavily) ==="]
     for i, r in enumerate(web_results, 1):
+        # Handle both WebSearchResult objects and dicts
+        if isinstance(r, dict):
+            title   = r.get("title", "")
+            url     = r.get("url", "")
+            snippet = r.get("snippet", "")
+        else:
+            title   = r.title
+            url     = r.url
+            snippet = r.snippet
+
         sections.append(f"\nWeb Result {i}:")
-        sections.append(r.to_context_string())
+        sections.append(
+            f"[WEB SOURCE] {title}\n"
+            f"URL: {url}\n"
+            f"Content: {snippet}"
+        )
 
     return "\n".join(sections)
 
@@ -172,7 +193,7 @@ def generate_answer(
 
     if not documents and not web_results:
         return (
-            "I couldn't find any relevant information in the NHTSA database "
+            "Couldn't find any relevant information in the NHTSA database "
             "or via web search for your question. "
             "Please try rephrasing, or check the vehicle spelling."
         )

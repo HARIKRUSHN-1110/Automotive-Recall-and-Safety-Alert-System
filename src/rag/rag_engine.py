@@ -27,6 +27,7 @@ MIN_RELEVANT_DOCS = 2     # minimum docs above PARTIAL_SCORE for "sufficient"
 def evaluate_retrieval_quality(
     docs: list[RetrievedDocument],
     make: Optional[str] = None,
+    model: Optional[str] = None,
 ) -> str:
     """
     Evaluates retrieval quality with manufacturer-aware checking.
@@ -35,9 +36,23 @@ def evaluate_retrieval_quality(
         return "insufficient"
 
     top_score = docs[0].score
+    relevant_docs = [d for d in docs if d.score >= PARTIAL_SCORE]
+    # Model-aware check if model specified and none of the
+    # retrieved docs match that model, results are wrong
+    if model:
+        matching_model = [
+            d for d in docs
+            if model.lower() in d.model.lower()
+            or d.model.lower() in model.lower()
+        ]
+        if not matching_model:
+            logger.info(
+                f"Quality: insufficient "
+                f"(model '{model}' not found in any retrieved doc)"
+            )
+            return "insufficient"
 
-    # Manufacturer check: if make is specified and NONE of the
-    # retrieved docs match that make, the results are wrong docs
+    # Make-aware check
     if make:
         matching_make = [
             d for d in docs
@@ -50,8 +65,6 @@ def evaluate_retrieval_quality(
                 f"(make '{make}' not found in any retrieved doc)"
             )
             return "insufficient"
-
-    relevant_docs = [d for d in docs if d.score >= PARTIAL_SCORE]
 
     if top_score >= SUFFICIENT_SCORE and len(relevant_docs) >= MIN_RELEVANT_DOCS:
         return "sufficient"
@@ -68,17 +81,30 @@ NON_NHTSA_BRANDS = [
     "dacia", "skoda", "seat", "lada", "proton", "perodua",
 ]
 
-def _extract_make_from_query(query: str) -> Optional[str]:
-    """
-    Detects if a known non-NHTSA brand is mentioned in the query.
-    Returns the brand name so the manufacturer check can run
-    even when the user hasn't filled in the vehicle filter.
-    """
+def _extract_vehicle_from_query(query: str) -> tuple[Optional[str], Optional[str]]:
+    """Detects non-NHTSA brand and model mentions in free text."""
     query_lower = query.lower()
+    
+    detected_make = None
+    detected_model = None
+    
     for brand in NON_NHTSA_BRANDS:
         if brand in query_lower:
-            return brand
-    return None
+            detected_make = brand
+            break
+    
+    # Common non-US models that won't be in NHTSA
+    non_nhtsa_models = [
+        "creta", "nexon", "swift", "baleno", "brezza",
+        "seltos", "sonet", "thar", "scorpio", "xuv",
+        "city", "jazz", "amaze", "fortuner india",
+    ]
+    for m in non_nhtsa_models:
+        if m in query_lower:
+            detected_model = m
+            break
+    
+    return detected_make, detected_model
 
 # Main CRAG ask function
 
@@ -114,7 +140,9 @@ def ask(
     )
 
     # If make not provided via filter, try to detect it from query text
-    detected_make = make or _extract_make_from_query(query)
+    detected_make, detected_model = _extract_vehicle_from_query(query)
+    effective_make  = make  or detected_make
+    effective_model = model or detected_model
 
     # 1 :Retrieve from ChromaDB
     internal_docs = retrieve_all(
@@ -128,7 +156,7 @@ def ask(
     # 2: Evaluate retrieval quality
     # 'make' is used for chromaDB filtering but 'detected_make' is used for quality gate, so even user does not fill the filter,
     # the brand name extract from web search
-    quality = evaluate_retrieval_quality(internal_docs, make=detected_make)
+    quality = evaluate_retrieval_quality(internal_docs, make=effective_make, model=effective_model)
 
     # 3: Web search if needed
     web_results = []
@@ -141,11 +169,17 @@ def ask(
             make=make,
             model=model,
             year=year,
+            max_results=3,
         )
         web_results = filter_relevant_results(raw_web, make, model)
         logger.info(
             f"Tavily returned {len(web_results)} relevant results."
         )
+
+    if quality == "partial":
+        internal_docs = internal_docs[:3]
+    elif quality == "insufficient":
+        internal_docs = []
 
     # 4: generate answer from combined context
     answer = generate_answer(
