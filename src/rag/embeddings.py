@@ -33,7 +33,8 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 
 # Where ChromaDB stores its persistent index on disk
 # On Streamlit Cloud this maps to a writable directory
-CHROMA_PATH = os.getenv("CHROMA_PATH", "data/chroma_db")
+base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+CHROMA_PATH = os.getenv("CHROMA_PATH", os.path.join(base_dir, "data", "chroma_db"))
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 HF_CHROMA_URL = os.getenv("HUGGINGFACE_CHROMA_URL")
 # ChromaDB collection names
@@ -340,27 +341,34 @@ def build_full_index(force_rebuild: bool = False) -> dict:
 
 def _download_index_from_hf():
     if not HF_CHROMA_URL:
-        logger.error("HUGGINGFACE_CHROMA_URL is not set in environment")
+        logger.error("HUGGINGFACE_CHROMA_URL not set")
         return False
     try:
-        logger.info(f"Downloading ChromaDB index from: {HF_CHROMA_URL}")
-        r = requests.get(HF_CHROMA_URL, timeout=300)
-        logger.info(f"Download response status: {r.status_code}")
+        # Use absolute path based on file location
+        base_dir = os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        )
+        data_dir = os.path.join(base_dir, "data")
+        os.makedirs(data_dir, exist_ok=True)
+
+        tar_path = os.path.join(data_dir, "chroma_db.tar.gz")
+
+        logger.info(f"Downloading ChromaDB from: {HF_CHROMA_URL}")
+        r = requests.get(HF_CHROMA_URL, timeout=600)
         r.raise_for_status()
-        
-        tar_path = "data/chroma_db.tar.gz"
-        os.makedirs("data", exist_ok=True)
+
         with open(tar_path, "wb") as f:
             f.write(r.content)
-        logger.info(f"Downloaded file size: {os.path.getsize(tar_path)} bytes")
-        
+        logger.info(f"Downloaded: {os.path.getsize(tar_path)} bytes")
+
         with tarfile.open(tar_path, "r:gz") as tar:
-            tar.extractall("data/")
+            tar.extractall(data_dir)
         os.remove(tar_path)
-        logger.info("ChromaDB index downloaded and extracted successfully.")
+
+        logger.info(f"Extracted to: {data_dir}")
         return True
     except Exception as e:
-        logger.error(f"HuggingFace index download failed: {type(e).__name__}: {e}")
+        logger.error(f"Download failed: {type(e).__name__}: {e}")
         return False
     
 def get_index_status() -> dict:

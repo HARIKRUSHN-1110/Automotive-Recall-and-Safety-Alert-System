@@ -6,7 +6,7 @@ numpy==1.26.4
 matplotlib
 nltk
 scipy
-scikit-learn
+scikit-learn==1.6.1
 lightgbm
 streamlit==1.41.0
 plotly
