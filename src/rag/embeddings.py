@@ -151,8 +151,9 @@ def build_complaints_index(force_rebuild: bool = False) -> int:
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute(
-        "SELECT COUNT(*) as total FROM complaints "
-        "WHERE summary IS NOT NULL AND summary != ''"
+        """SELECT COUNT(*) as total FROM complaints
+            WHERE summary IS NOT NULL AND summary != ''
+            AND model_year >= 2018"""
     )
     total = cur.fetchone()["total"]
     conn.close()  # close immediately after count query
@@ -177,6 +178,7 @@ def build_complaints_index(force_rebuild: bool = False) -> int:
                 FROM complaints
                 WHERE summary IS NOT NULL
                   AND summary != ''
+                  AND model_year >= 2018
                 ORDER BY odi_number
                 LIMIT %s OFFSET %s
                 """,

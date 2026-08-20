@@ -1,7 +1,7 @@
 """
 main.py: The FastAPI application entry point.
 
-This file ONLY does three things:
+This file only does three things:
 1. Creates the FastAPI app with metadata (powers the Swagger UI)
 2. Adds middleware (CORS so browsers can call the API)
 3. Includes the router from routes.py

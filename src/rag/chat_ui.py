@@ -177,7 +177,7 @@ def _ensure_index_ready():
 def render_chat_tab():
     """
     Renders the full RAG chat interface.
-    Call this inside your Streamlit app.
+    Call this inside Streamlit app.
     """
     _inject_chat_css()
     st.header("Ask About Vehicle Safety")

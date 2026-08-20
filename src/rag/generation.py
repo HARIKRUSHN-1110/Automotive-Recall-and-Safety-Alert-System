@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 # Config
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = "llama-3.3-70b-versatile"
+GROQ_MODEL = "gpt-oss-120b"
 MAX_TOKENS = 1024
 
 # Groq client singleton
